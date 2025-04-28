@@ -1,120 +1,100 @@
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
-const config = require('./config.json');
+const path = require('path');
 
-if (!fs.existsSync('./logs')) fs.mkdirSync('./logs');
+// ID do grupo permitido (depois você vai pegar usando !id)
+const allowedGroupId = 'SEU-GRUPO-ID@g.us';
 
-const floodMap = new Map();
+// Pasta de logs
+const logsPath = path.join(__dirname, 'logs');
+if (!fs.existsSync(logsPath)) {
+    fs.mkdirSync(logsPath);
+}
 
-const logAction = (text) => {
-    const time = new Date().toISOString();
-    fs.appendFileSync(config.logFile, `[${time}] ${text}\n`);
-};
+// Função para registrar logs
+function log(message) {
+    const logFilePath = path.join(logsPath, 'bot.log');
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logFilePath, `[${timestamp}] ${message}\n`);
+    console.log(`[${timestamp}] ${message}`);
+}
 
-const logError = (text) => {
-    const time = new Date().toISOString();
-    fs.appendFileSync(config.errorLogFile, `[${time}] ${text}\n`);
-};
-
+// Inicializa o cliente do WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
 
-client.on('qr', qr => {
-    console.log('QR Code gerado, escaneie com seu WhatsApp:');
+// Exibe o QR Code no terminal
+client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
+    log('QR Code gerado, escaneie usando seu WhatsApp');
 });
 
-client.on('ready', async () => {
-    console.log('Bot conectado com sucesso!');
-    const chats = await client.getChats();
-    const groupChats = chats.filter(c => c.isGroup);
-    console.log(`Conectado a ${groupChats.length} grupos.`);
+// Conectado
+client.on('ready', () => {
+    log('Bot conectado com sucesso!');
 });
 
-client.on('auth_failure', msg => {
-    console.error('Falha na autenticação:', msg);
-});
+// Escuta as mensagens
+client.on('message', async (msg) => {
+    console.log('Mensagem recebida de:', msg.chatId);
 
-client.on('disconnected', reason => {
-    console.log('Bot desconectado:', reason);
-    client.initialize();
-});
+    if (!msg.isGroupMsg) return;
 
-client.on('group_join', async (notification) => {
-    if (!config.welcomeMessages) return;
-    const chat = await notification.getChat();
-    chat.sendMessage(`Seja bem-vindo(a) @${notification.recipientIds[0].split('@')[0]} ao grupo *${chat.name}*!`, { mentions: [notification.recipientIds[0]] });
-});
+    // [NOVO] Comando para mostrar o ID do grupo
+    if (msg.body === '!id') {
+        await msg.reply(`O ID deste grupo é: ${msg.chatId}`);
+        log(`Comando !id usado no grupo ${msg.chatId}`);
+        return;
+    }
 
-client.on('message', async message => {
-    try {
-        const chat = await message.getChat();
-        if (!chat.isGroup) return;
+    // Só responde em grupos permitidos
+    if (msg.chatId !== allowedGroupId) return;
 
-        const sender = await message.getContact();
-        const content = message.body.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const wordCount = content.trim().split(/\s+/).length;
-        let shouldDelete = false;
+    const body = msg.body.toLowerCase();
+    const wordCount = body.trim().split(/\s+/).length;
 
-        const participant = chat.participants.find(p => p.id._serialized === sender.id._serialized);
-        const isAdmin = participant ? participant.isAdmin || participant.isSuperAdmin : false;
+    // Detectar anúncios
+    const keywords = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
 
-        if (config.protectAdmins && isAdmin) return; // Protege admins
+    if (keywords.some(word => body.includes(word))) {
+        await msg.delete(true);
+        await msg.reply('*Essa mensagem viola as regras do grupo*');
+        log(`Mensagem de anúncio apagada: "${msg.body}"`);
+        return;
+    }
 
-        // Flood Protection
-        if (config.floodProtection.enabled) {
-            const userKey = sender.id._serialized;
-            if (!floodMap.has(userKey)) {
-                floodMap.set(userKey, []);
-            }
-            const timestamps = floodMap.get(userKey);
-            const now = Date.now();
-            timestamps.push(now);
-            floodMap.set(userKey, timestamps.filter(ts => now - ts < config.floodProtection.timeWindow * 1000));
-            if (floodMap.get(userKey).length > config.floodProtection.limit) {
-                shouldDelete = true;
-            }
+    // Detectar bom dia, boa tarde, boa noite spam
+    if (['bom dia', 'boa tarde', 'boa noite'].some(phrase => body.includes(phrase))) {
+        if (wordCount < 4 || body.match(/bo+m+\s*dia|boa+\s*tarde+|boa+\s*noite+/)) {
+            await msg.delete(true);
+            await msg.reply('*Essa mensagem viola as regras do grupo*');
+            log(`Mensagem de saudação curta apagada: "${msg.body}"`);
+            return;
         }
+    }
 
-        // Bloqueio por palavras proibidas
-        for (let word of config.blockedWords) {
-            if (content.includes(word)) {
-                shouldDelete = true;
-                break;
-            }
-        }
-
-        // Mensagens automáticas
-        for (let phrase of config.autoDeleteMessages) {
-            if (content.includes(phrase) && wordCount < config.minWords) {
-                shouldDelete = true;
-                break;
-            }
-        }
-
-        // Deleta figurinhas
-        if (message.hasMedia) {
-            const media = await message.downloadMedia();
-            if (media.mimetype === 'image/webp') {
-                shouldDelete = true;
-            }
-        }
-
-        if (shouldDelete) {
-            await message.delete(true);
-            await chat.sendMessage(`*Essa mensagem de @${sender.id.user} viola as regras do Grupo*`, { mentions: [sender] });
-            logAction(`Mensagem deletada de ${sender.pushname || sender.number} no grupo ${chat.name}: ${content}`);
-        }
-
-    } catch (error) {
-        console.error('Erro ao processar mensagem:', error);
-        logError(error.toString());
+    // Detectar figurinhas
+    if (msg.type === 'sticker') {
+        await msg.delete(true);
+        await msg.reply('*Essa mensagem viola as regras do grupo*');
+        log('Figurinha apagada.');
+        return;
     }
 });
 
+// Tratamento de erro
+client.on('auth_failure', (msg) => {
+    log(`Falha na autenticação: ${msg}`);
+});
+
+client.on('disconnected', (reason) => {
+    log(`Bot desconectado: ${reason}`);
+});
+
+// Inicializa
 client.initialize();
