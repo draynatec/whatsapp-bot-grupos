@@ -1,0 +1,15 @@
+{
+  "name": "whatsapp-bot-grupos",
+  "version": "2.0.0",
+  "description": "Bot avançado de gestão de grupos WhatsApp",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Seu Nome",
+  "license": "MIT",
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.24.0"
+  }
+}

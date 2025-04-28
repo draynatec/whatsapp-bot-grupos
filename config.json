@@ -1,0 +1,26 @@
+{
+  "minWords": 4,
+  "blockedWords": [
+    "promoção",
+    "compre",
+    "venda",
+    "oferta",
+    "desconto",
+    "mercado livre",
+    "mercadolivre",
+    "booom",
+    "boaaa",
+    "booom dia",
+    "boaaa tarde"
+  ],
+  "autoDeleteMessages": ["bom dia", "boa tarde", "boa noite"],
+  "welcomeMessages": true,
+  "protectAdmins": true,
+  "floodProtection": {
+    "enabled": true,
+    "limit": 3,
+    "timeWindow": 10
+  },
+  "logFile": "./logs/actions.log",
+  "errorLogFile": "./logs/errors.log"
+}
