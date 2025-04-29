@@ -5,75 +5,60 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
-// Chave da API de previsão do tempo
+// Chave da API do clima
 const WEATHER_API_KEY = '180053f3bc0132b960f34201304e89a7';
 
 // Pasta de logs
 const logsPath = path.join(__dirname, 'logs');
-if (!fs.existsSync(logsPath)) {
-    fs.mkdirSync(logsPath);
-}
+if (!fs.existsSync(logsPath)) fs.mkdirSync(logsPath);
 
-// Função para salvar logs
+// Função de log
 function log(message) {
-    const logFilePath = path.join(logsPath, 'bot.log');
+    const logFile = path.join(logsPath, 'bot.log');
     const timestamp = new Date().toISOString();
-    fs.appendFileSync(logFilePath, `[${timestamp}] ${message}\n`);
+    fs.appendFileSync(logFile, `[${timestamp}] ${message}\n`);
     console.log(`[${timestamp}] ${message}`);
 }
 
-// Inicializa o cliente WhatsApp
+// Inicializa cliente WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--single-process', '--disable-gpu']
     }
 });
 
-// Exibe QR Code no terminal
-client.on('qr', (qr) => {
+// Eventos de conexão
+client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
     log('QR Code gerado! Escaneie com o WhatsApp.');
 });
+client.on('ready', () => log('Bot conectado e pronto!'));
+client.on('auth_failure', msg => log(`Falha na autenticação: ${msg}`));
+client.on('disconnected', reason => log(`Bot desconectado: ${reason}`));
 
-// Confirmação de conexão
-client.on('ready', () => {
-    log('Bot conectado e pronto!');
-});
-
-// Controle de stickers
+// Controle de bloqueios
 const stickerCounts = {};
 const blockedUsers = {};
 const BLOCK_TIME = 5 * 60 * 1000; // 5 minutos
 
-// Evento de recebimento de mensagens
-client.on('message', async (msg) => {
-    console.log('Mensagem recebida de:', msg.from);
-
+// Evento principal
+client.on('message', async msg => {
     if (!msg.from.endsWith('@g.us')) return;
 
     const senderId = msg.author || msg.from;
-    const body = msg.body ? msg.body.toLowerCase() : '';
+    const body = msg.body?.toLowerCase() || '';
 
-    // Verifica se o usuário está bloqueado
+    // Verifica bloqueio
     if (blockedUsers[senderId]) {
-        const remaining = blockedUsers[senderId] - Date.now();
-        if (remaining > 0) {
+        const restante = blockedUsers[senderId] - Date.now();
+        if (restante > 0) {
             try {
                 await msg.delete(true);
-                log(`Mensagem apagada de ${senderId} (usuário bloqueado)`);
+                log(`Mensagem apagada de bloqueado: ${senderId}`);
             } catch (err) {
-                log(`Erro ao apagar mensagem de bloqueado: ${err}`);
+                log(`Erro ao apagar de bloqueado: ${err}`);
             }
             return;
         } else {
@@ -82,76 +67,72 @@ client.on('message', async (msg) => {
         }
     }
 
-    // Comando para mostrar ID do grupo
+    // !id - mostra ID do grupo
     if (body === '!id') {
-        await msg.reply(`ID deste grupo é: ${msg.from}`);
-        log(`Comando !id usado no grupo ${msg.from}`);
+        await msg.reply(`ID deste grupo: ${msg.from}`);
+        log(`Comando !id usado por ${senderId}`);
         return;
     }
 
-    // Comando para previsão do tempo
+    // !clima - previsão do tempo no privado
     if (body === '!clima') {
         const contact = await msg.getContact();
-
         try {
             const res = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
             const data = res.data;
-
-            const chanceChuva = data.weather[0].main.toLowerCase().includes('rain') ? 'Alta chance de chuva' : 'Sem chuva prevista';
             const texto = `*Previsão para Catanduva-SP:*\n` +
                           `Temperatura: ${data.main.temp}°C\n` +
                           `Céu: ${data.weather[0].description}\n` +
                           `Umidade: ${data.main.humidity}%\n` +
-                          `${chanceChuva}`;
-
+                          `Chance de chuva: ${data.clouds.all}%`;
             await client.sendMessage(contact.id._serialized, texto);
-            log(`Previsão enviada no privado de ${contact.id.user}`);
+            log(`Clima enviado no privado de ${senderId}`);
         } catch (err) {
             log('Erro ao buscar clima: ' + err);
-            await msg.reply('Erro ao obter a previsão do tempo.');
+            await msg.reply('Erro ao obter previsão do tempo.');
         }
         return;
     }
 
-    // Palavras-chave de anúncios
+    // Anúncios
     const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
-    if (anuncios.some(palavra => body.includes(palavra))) {
+    if (anuncios.some(p => body.includes(p))) {
         try {
             await msg.delete(true);
             await msg.reply('*Mensagem de anúncio apagada*');
-            log(`Mensagem de anúncio apagada: "${msg.body}"`);
+            log(`Anúncio apagado: ${body}`);
         } catch (err) {
             log(`Erro ao apagar anúncio: ${err}`);
         }
         return;
     }
 
-    // Detectar cumprimentos curtos
+    // Cumprimentos curtos
     const cumprimentos = ['bom dia', 'boa tarde', 'boa noite'];
-    if (cumprimentos.some(frase => body.includes(frase)) && body.split(' ').length <= 5) {
+    if (cumprimentos.some(f => body.includes(f)) && body.split(' ').length <= 5) {
         try {
             await msg.delete(true);
             await msg.reply('*Mensagem de cumprimento apagada*');
-            log(`Cumprimento apagado: "${msg.body}"`);
+            log(`Cumprimento apagado: ${body}`);
         } catch (err) {
             log(`Erro ao apagar cumprimento: ${err}`);
         }
         return;
     }
 
-    // Lógica para figurinhas com advertência e bloqueio
-    if (msg.type === 'sticker') {
+    // Stickers e GIFs
+    if (msg.type === 'sticker' || (msg.type === 'image' && msg._data?.isAnimated)) {
         stickerCounts[senderId] = (stickerCounts[senderId] || 0) + 1;
 
         if (stickerCounts[senderId] === 3) {
             try {
                 const contact = await msg.getContact();
                 const nome = contact.pushname || contact.number;
-                await msg.reply(`*${nome}*, pare de mandar figurinhas! Você será silenciado se continuar.`);
+                await msg.reply(`*${nome}*, pare de enviar figurinhas ou GIFs! Você será silenciado se continuar.`);
                 await msg.delete(true);
-                log(`Advertência enviada para ${senderId}`);
+                log(`Advertência enviada a ${senderId}`);
             } catch (err) {
-                log(`Erro ao advertir: ${err}`);
+                log(`Erro na advertência: ${err}`);
             }
             return;
         }
@@ -162,39 +143,26 @@ client.on('message', async (msg) => {
                 await msg.delete(true);
                 const contact = await msg.getContact();
                 const nome = contact.pushname || contact.number;
-                await msg.reply(`*${nome}* foi silenciado por 5 minutos por enviar figurinhas demais.`);
-                log(`Usuário ${senderId} silenciado por excesso de figurinhas.`);
+                await msg.reply(`*${nome}* foi silenciado por 5 minutos por excesso de figurinhas ou GIFs.`);
+                log(`Silenciado ${senderId}`);
             } catch (err) {
-                log(`Erro ao silenciar usuário: ${err}`);
+                log(`Erro ao silenciar: ${err}`);
             }
             return;
         }
 
-        // Apaga em silêncio
         try {
-            await msg.delete(true);
-            log(`Sticker apagado em silêncio de ${senderId}`);
+            await msg.delete(true); // apaga silenciosamente
+            log(`Sticker ou GIF apagado de ${senderId}`);
         } catch (err) {
-            log(`Erro ao apagar sticker: ${err}`);
+            log(`Erro ao apagar sticker/GIF: ${err}`);
         }
         return;
     }
 
-    // Zera contagem se não for figurinha
-    if (stickerCounts[senderId]) {
-        stickerCounts[senderId] = 0;
-    }
+    // Zera contagem se não for figurinha ou gif
+    if (stickerCounts[senderId]) stickerCounts[senderId] = 0;
 });
 
-// Erro de autenticação
-client.on('auth_failure', (msg) => {
-    log(`Falha na autenticação: ${msg}`);
-});
-
-// Desconexão
-client.on('disconnected', (reason) => {
-    log(`Bot desconectado: ${reason}`);
-});
-
-// Inicializar o cliente
+// Inicia o bot
 client.initialize();
