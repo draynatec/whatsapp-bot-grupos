@@ -44,7 +44,7 @@ client.on('qr', (qr) => {
     log('QR Code gerado, escaneie usando seu WhatsApp');
 });
 
-// Quando estiver pronto
+// Bot conectado
 client.on('ready', () => {
     log('Bot conectado com sucesso!');
 });
@@ -70,7 +70,6 @@ client.on('message', async (msg) => {
 
     // Detectar anúncios
     const keywords = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
-
     if (keywords.some(word => body.includes(word))) {
         await msg.delete(true);
         await msg.reply('*Essa mensagem viola as regras do grupo*');
@@ -78,7 +77,7 @@ client.on('message', async (msg) => {
         return;
     }
 
-    // Detectar mensagens "bom dia", "boa tarde", "boa noite" curtas
+    // Detectar bom dia, boa tarde, boa noite spam
     if (['bom dia', 'boa tarde', 'boa noite'].some(phrase => body.includes(phrase))) {
         if (wordCount < 4 || body.match(/bo+m+\s*dia|boa+\s*tarde+|boa+\s*noite+/)) {
             await msg.delete(true);
@@ -89,7 +88,7 @@ client.on('message', async (msg) => {
     }
 
     // Detectar figurinhas (stickers)
-    if (msg.type === 'sticker') {
+    if (msg.hasMedia && msg.type === 'sticker') {
         try {
             log('Tentando apagar sticker...');
             await msg.delete(true);
@@ -102,12 +101,11 @@ client.on('message', async (msg) => {
     }
 });
 
-// Tratamento de erro de autenticação
+// Tratamento de erro
 client.on('auth_failure', (msg) => {
     log(`Falha na autenticação: ${msg}`);
 });
 
-// Tratamento de desconexão
 client.on('disconnected', (reason) => {
     log(`Bot desconectado: ${reason}`);
 });
