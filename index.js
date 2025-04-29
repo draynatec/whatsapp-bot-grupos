@@ -1,10 +1,8 @@
+// Importações
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
-
-// --- CONFIGURAÇÃO (só depois de descobrir o ID) ---
-// const allowedGroupId = '120363418128652043@g.us';  // <- só usar depois!
 
 // Pasta de logs
 const logsPath = path.join(__dirname, 'logs');
@@ -12,7 +10,7 @@ if (!fs.existsSync(logsPath)) {
     fs.mkdirSync(logsPath);
 }
 
-// Função de log
+// Função para salvar logs
 function log(message) {
     const logFilePath = path.join(logsPath, 'bot.log');
     const timestamp = new Date().toISOString();
@@ -38,47 +36,40 @@ const client = new Client({
     }
 });
 
-// Quando gerar QR Code
+// Exibe QR Code no terminal
 client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
-    log('QR Code gerado, escaneie usando seu WhatsApp');
+    log('QR Code gerado! Escaneie com o WhatsApp.');
 });
 
-// Quando o bot ficar pronto
+// Confirmação de conexão
 client.on('ready', () => {
-    log('Bot conectado com sucesso!');
+    log('Bot conectado e pronto!');
 });
 
-// Escutando mensagens
+// Evento de recebimento de mensagens
 client.on('message', async (msg) => {
     console.log('Mensagem recebida de:', msg.from);
 
-    if (!msg.isGroupMsg) return;  // Só responde em grupos
+    // Apenas grupos
+    if (!msg.from.endsWith('@g.us')) return;
 
-    // Comando para pegar o ID do grupo
-    if (msg.body === '!id') {
-        await msg.reply(`O ID deste grupo é: ${msg.chatId}`);
-        log(`Comando !id usado no grupo: ${msg.chatId}`);
+    const body = msg.body.toLowerCase();
+
+    // Comando para mostrar ID do grupo
+    if (body === '!id') {
+        await msg.reply(`ID deste grupo é: ${msg.from}`);
+        log(`Comando !id usado no grupo ${msg.from}`);
         return;
     }
 
-    // --- DEPOIS DE PEGAR O ID, ATIVAR ISSO ---
-    /*
-    if (msg.chatId !== allowedGroupId) {
-        return; // Ignora mensagens de outros grupos
-    }
-    */
+    // Palavras-chave de anúncios
+    const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
 
-    const body = msg.body.toLowerCase();
-    const wordCount = body.trim().split(/\s+/).length;
-
-    // Detectar palavras proibidas (anúncios)
-    const keywords = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
-
-    if (keywords.some(word => body.includes(word))) {
+    if (anuncios.some(palavra => body.includes(palavra))) {
         try {
             await msg.delete(true);
-            await msg.reply('*Mensagem apagada: anúncios não são permitidos.*');
+            await msg.reply('*Mensagem de anúncio apagada*');
             log(`Mensagem de anúncio apagada: "${msg.body}"`);
         } catch (err) {
             log(`Erro ao apagar anúncio: ${err}`);
@@ -86,26 +77,25 @@ client.on('message', async (msg) => {
         return;
     }
 
-    // Detectar spam de bom dia/boa tarde/boa noite
-    if (['bom dia', 'boa tarde', 'boa noite'].some(phrase => body.includes(phrase))) {
-        if (wordCount < 4) {
-            try {
-                await msg.delete(true);
-                await msg.reply('*Mensagem apagada: spam de saudação.*');
-                log(`Mensagem de saudação apagada: "${msg.body}"`);
-            } catch (err) {
-                log(`Erro ao apagar saudação: ${err}`);
-            }
-            return;
+    // Detectar cumprimentos curtos
+    const cumprimentos = ['bom dia', 'boa tarde', 'boa noite'];
+    if (cumprimentos.some(frase => body.includes(frase)) && body.split(' ').length <= 5) {
+        try {
+            await msg.delete(true);
+            await msg.reply('*Mensagem de cumprimento apagada*');
+            log(`Cumprimento apagado: "${msg.body}"`);
+        } catch (err) {
+            log(`Erro ao apagar cumprimento: ${err}`);
         }
+        return;
     }
 
-    // Detectar e apagar figurinhas
+    // Apagar figurinhas (stickers)
     if (msg.type === 'sticker') {
         try {
             await msg.delete(true);
-            await msg.reply('*Sticker apagado: não permitido no grupo.*');
-            log('Sticker apagado.');
+            await msg.reply('*Sticker apagado*');
+            log('Sticker apagado com sucesso.');
         } catch (err) {
             log(`Erro ao apagar sticker: ${err}`);
         }
@@ -113,14 +103,15 @@ client.on('message', async (msg) => {
     }
 });
 
-// Tratamento de erros
+// Erro de autenticação
 client.on('auth_failure', (msg) => {
     log(`Falha na autenticação: ${msg}`);
 });
 
+// Desconexão
 client.on('disconnected', (reason) => {
     log(`Bot desconectado: ${reason}`);
 });
 
-// Iniciar o bot
+// Inicializar o cliente
 client.initialize();
