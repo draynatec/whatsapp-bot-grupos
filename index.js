@@ -88,9 +88,9 @@ client.on('message', async (msg) => {
         }
     }
 
-// // Detectar figurinhas
-if (msg.type === 'sticker') {
+// // if (msg.type === 'sticker') {
     try {
+        log('Tentando apagar sticker...');
         await msg.delete(true);
         await msg.reply('*Essa mensagem viola as regras do grupo (Sticker apagado)*');
         log('Sticker apagado com sucesso.');
