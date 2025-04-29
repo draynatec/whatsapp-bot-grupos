@@ -88,15 +88,16 @@ client.on('message', async (msg) => {
         }
     }
 
-// Detectar figurinhas
-if (msg.type === 'sticker' || msg.type === 'image') {
-    const isSticker = msg.type === 'sticker' || (msg._data && msg._data.isViewOnce === false && msg._data.stickerMetadata);
-    if (isSticker) {
+// // Detectar figurinhas
+if (msg.type === 'sticker') {
+    try {
         await msg.delete(true);
-        await msg.reply('*Essa mensagem viola as regras do grupo*');
-        log('Figurinha apagada.');
-        return;
+        await msg.reply('*Essa mensagem viola as regras do grupo (Sticker apagado)*');
+        log('Sticker apagado com sucesso.');
+    } catch (err) {
+        log(`Erro ao tentar apagar sticker: ${err}`);
     }
+    return;
 }
 });
 
