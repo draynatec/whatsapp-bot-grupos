@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ID do grupo permitido (depois você vai pegar usando !id)
-const allowedGroupId = 'SEU-GRUPO-ID@g.us';
+const allowedGroupId = '120363418128652043@g.us';
 
 // Pasta de logs
 const logsPath = path.join(__dirname, 'logs');
