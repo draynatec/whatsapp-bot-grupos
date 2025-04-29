@@ -3,6 +3,10 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+
+// Chave da API de previsão do tempo
+const WEATHER_API_KEY = '180053f3bc0132b960f34201304e89a7';
 
 // Pasta de logs
 const logsPath = path.join(__dirname, 'logs');
@@ -83,6 +87,28 @@ client.on('message', async (msg) => {
     if (body === '!id') {
         await msg.reply(`ID deste grupo é: ${msg.from}`);
         log(`Comando !id usado no grupo ${msg.from}`);
+        return;
+    }
+
+    // Comando para previsão do tempo
+    if (body === '!clima') {
+        const contact = await msg.getContact();
+
+        try {
+            const res = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
+            const data = res.data;
+
+            const texto = `*Previsão para Catanduva-SP:*\n` +
+                          `Temperatura: ${data.main.temp}°C\n` +
+                          `Céu: ${data.weather[0].description}\n` +
+                          `Umidade: ${data.main.humidity}%`;
+
+            await client.sendMessage(contact.id._serialized, texto);
+            log(`Previsão enviada no privado de ${contact.id.user}`);
+        } catch (err) {
+            log('Erro ao buscar clima: ' + err);
+            await msg.reply('Erro ao obter a previsão do tempo.');
+        }
         return;
     }
 
