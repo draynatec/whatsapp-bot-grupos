@@ -44,7 +44,7 @@ const stickerCounts = {};
 const blockedUsers = {};
 const BLOCK_TIME = 5 * 60 * 1000; // 5 minutos
 
-// Mensagens proibidas
+// Palavras proibidas
 const cumprimentos = ['bom dia', 'boa tarde', 'boa noite'];
 const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
 
@@ -55,7 +55,7 @@ client.on('message', async msg => {
     const senderId = msg.author || msg.from;
     const body = msg.body?.toLowerCase() || '';
 
-    // Verifica se está bloqueado
+    // Verifica bloqueio
     if (blockedUsers[senderId]) {
         if (Date.now() < blockedUsers[senderId]) {
             try {
@@ -121,7 +121,7 @@ client.on('message', async msg => {
         return;
     }
 
-    // OCR em imagem
+    // OCR em imagens
     if (msg.hasMedia && msg.type === 'image') {
         try {
             const media = await msg.downloadMedia();
@@ -129,16 +129,19 @@ client.on('message', async msg => {
             fs.writeFileSync(filePath, Buffer.from(media.data, 'base64'));
 
             const { data: { text } } = await Tesseract.recognize(filePath, 'por', {
-                logger: m => log(`OCR: ${m.status} (${Math.round(m.progress * 100)}%)`)
+                logger: m => log(`OCR: ${m.status} - ${Math.round(m.progress * 100)}%`)
             });
 
             fs.unlinkSync(filePath);
-            const texto = text.toLowerCase();
+
+            const texto = text.toLowerCase().replace(/\s+/g, ' ').trim();
+
             if (cumprimentos.some(f => texto.includes(f))) {
                 await msg.delete(true);
-                log(`Imagem com cumprimento apagada: "${texto.trim()}"`);
+                log(`Imagem com saudação detectada e apagada: "${texto}"`);
                 return;
             }
+
         } catch (err) {
             log(`Erro no OCR: ${err}`);
         }
