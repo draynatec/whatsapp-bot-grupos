@@ -121,7 +121,7 @@ client.on('message', async msg => {
         return;
     }
 
-    // OCR em imagens
+    // OCR em imagens (melhorado)
     if (msg.hasMedia && msg.type === 'image') {
         try {
             const media = await msg.downloadMedia();
@@ -134,9 +134,18 @@ client.on('message', async msg => {
 
             fs.unlinkSync(filePath);
 
-            const texto = text.toLowerCase().replace(/\s+/g, ' ').trim();
+            const texto = text
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '') // remove acentos
+                .replace(/\s+/g, ' ')            // remove quebras de linha e espaços extras
+                .trim();
 
-            if (cumprimentos.some(f => texto.includes(f))) {
+            const cumprimentosNorm = cumprimentos.map(f =>
+                f.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            );
+
+            if (cumprimentosNorm.some(f => texto.includes(f))) {
                 await msg.delete(true);
                 log(`Imagem com saudação detectada e apagada: "${texto}"`);
                 return;
