@@ -88,13 +88,13 @@ client.on('message', async (msg) => {
         }
     }
 
-    // Detectar figurinhas
-    if (msg.type === 'sticker') {
-        await msg.delete(true);
-        await msg.reply('*Essa mensagem viola as regras do grupo*');
-        log('Figurinha apagada.');
-        return;
-    }
+// Detectar figurinhas
+if (msg.type === 'sticker' || (msg.mimetype && msg.mimetype.includes('image/webp'))) {
+    await msg.delete(true);
+    await msg.reply('*Essa mensagem viola as regras do grupo*');
+    log('Figurinha apagada.');
+    return;
+}
 });
 
 // Tratamento de erro
