@@ -82,13 +82,23 @@ client.on('message', async msg => {
     if (body === '!clima') {
         const contact = await msg.getContact();
         try {
-            const res = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
+            const res = await axios.get(`https://api.openweathermap.org/data/2.5/forecast?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
             const data = res.data;
+
+            const previsao = data.list[0]; // previsão para a próxima hora
+            const temp = previsao.main.temp;
+            const descricao = previsao.weather[0].description;
+            const umidade = previsao.main.humidity;
+            const nuvens = previsao.clouds.all;
+            const chanceChuva = Math.round((previsao.pop || 0) * 100); // de 0 a 100%
+
             const texto = `*Previsão para Catanduva-SP:*\n` +
-                `Temperatura: ${data.main.temp}°C\n` +
-                `Céu: ${data.weather[0].description}\n` +
-                `Umidade: ${data.main.humidity}%\n` +
-                `Nuvens: ${data.clouds.all}%`;
+                `Temperatura: ${temp}°C\n` +
+                `Céu: ${descricao}\n` +
+                `Umidade: ${umidade}%\n` +
+                `Nuvens: ${nuvens}%\n` +
+                `Chance de chuva: ${chanceChuva}%`;
+
             await client.sendMessage(contact.id._serialized, texto);
             log(`Previsão enviada a ${senderId}`);
         } catch (err) {
