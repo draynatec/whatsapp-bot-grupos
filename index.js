@@ -51,7 +51,7 @@ client.on('ready', () => {
 
 // Escuta as mensagens
 client.on('message', async (msg) => {
-    console.log('Mensagem recebida de:', msg.chatId);
+    console.log('Mensagem recebida de:', msg.from);
 
     if (!msg.isGroupMsg) return;
 
