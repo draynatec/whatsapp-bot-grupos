@@ -60,7 +60,6 @@ const BLOCK_TIME = 5 * 60 * 1000; // 5 minutos
 client.on('message', async (msg) => {
     console.log('Mensagem recebida de:', msg.from);
 
-    // Apenas grupos
     if (!msg.from.endsWith('@g.us')) return;
 
     const senderId = msg.author || msg.from;
@@ -98,10 +97,12 @@ client.on('message', async (msg) => {
             const res = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
             const data = res.data;
 
+            const chanceChuva = data.weather[0].main.toLowerCase().includes('rain') ? 'Alta chance de chuva' : 'Sem chuva prevista';
             const texto = `*Previsão para Catanduva-SP:*\n` +
                           `Temperatura: ${data.main.temp}°C\n` +
                           `Céu: ${data.weather[0].description}\n` +
-                          `Umidade: ${data.main.humidity}%`;
+                          `Umidade: ${data.main.humidity}%\n` +
+                          `${chanceChuva}`;
 
             await client.sendMessage(contact.id._serialized, texto);
             log(`Previsão enviada no privado de ${contact.id.user}`);
@@ -138,26 +139,41 @@ client.on('message', async (msg) => {
         return;
     }
 
-    // Apagar figurinhas (stickers) com controle
+    // Lógica para figurinhas com advertência e bloqueio
     if (msg.type === 'sticker') {
         stickerCounts[senderId] = (stickerCounts[senderId] || 0) + 1;
 
-        if (stickerCounts[senderId] > 2) {
-            blockedUsers[senderId] = Date.now() + BLOCK_TIME;
+        if (stickerCounts[senderId] === 3) {
             try {
+                const contact = await msg.getContact();
+                const nome = contact.pushname || contact.number;
+                await msg.reply(`*${nome}*, pare de mandar figurinhas! Você será silenciado se continuar.`);
                 await msg.delete(true);
-                await msg.reply('*Você enviou muitas figurinhas. Está temporariamente bloqueado.*');
-                log(`Usuário ${senderId} bloqueado por excesso de figurinhas.`);
+                log(`Advertência enviada para ${senderId}`);
             } catch (err) {
-                log(`Erro ao apagar sticker excessivo: ${err}`);
+                log(`Erro ao advertir: ${err}`);
             }
             return;
         }
 
+        if (stickerCounts[senderId] > 3) {
+            blockedUsers[senderId] = Date.now() + BLOCK_TIME;
+            try {
+                await msg.delete(true);
+                const contact = await msg.getContact();
+                const nome = contact.pushname || contact.number;
+                await msg.reply(`*${nome}* foi silenciado por 5 minutos por enviar figurinhas demais.`);
+                log(`Usuário ${senderId} silenciado por excesso de figurinhas.`);
+            } catch (err) {
+                log(`Erro ao silenciar usuário: ${err}`);
+            }
+            return;
+        }
+
+        // Apaga em silêncio
         try {
             await msg.delete(true);
-            await msg.reply('*Sticker apagado*');
-            log('Sticker apagado com sucesso.');
+            log(`Sticker apagado em silêncio de ${senderId}`);
         } catch (err) {
             log(`Erro ao apagar sticker: ${err}`);
         }
