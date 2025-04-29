@@ -121,7 +121,10 @@ client.on('message', async msg => {
     }
 
     // Stickers e GIFs
-    if (msg.type === 'sticker' || (msg.type === 'image' && msg._data?.isAnimated)) {
+    if (
+        msg.type === 'sticker' ||
+        (msg.type === 'video' && msg._data?.isGif === true)
+    ) {
         stickerCounts[senderId] = (stickerCounts[senderId] || 0) + 1;
 
         if (stickerCounts[senderId] === 3) {
@@ -152,7 +155,7 @@ client.on('message', async msg => {
         }
 
         try {
-            await msg.delete(true); // apaga silenciosamente
+            await msg.delete(true);
             log(`Sticker ou GIF apagado de ${senderId}`);
         } catch (err) {
             log(`Erro ao apagar sticker/GIF: ${err}`);
