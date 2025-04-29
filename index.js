@@ -88,16 +88,15 @@ client.on('message', async (msg) => {
         }
     }
 
-// // Detectar figurinhas
-if (msg.type === 'sticker' || (msg.hasMedia && msg.mimetype === 'image/webp')) {
-    try {
-        await msg.delete(true); // Tenta apagar a figurinha
-        await msg.reply('*Essa mensagem viola as regras do grupo*'); // Responde avisando
-        log(`Figurinha apagada: ${msg.id.id}`); // Salva no log que apagou
-    } catch (err) {
-        log(`Erro ao apagar figurinha: ${err}`); // Se der erro ao apagar, registra
+// Detectar figurinhas
+if (msg.type === 'sticker' || msg.type === 'image') {
+    const isSticker = msg.type === 'sticker' || (msg._data && msg._data.isViewOnce === false && msg._data.stickerMetadata);
+    if (isSticker) {
+        await msg.delete(true);
+        await msg.reply('*Essa mensagem viola as regras do grupo*');
+        log('Figurinha apagada.');
+        return;
     }
-    return;
 }
 });
 
