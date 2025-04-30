@@ -33,10 +33,23 @@ client.on('disconnected', reason => log(`Desconectado: ${reason}`));
 // Listas de controle
 const cumprimentosCurtos = ['bom dia', 'boa tarde', 'boa noite'];
 const palavrasPermitidasOCR = cumprimentosCurtos;
-const palavrasBloqueadas = ['promoção', 'compre', 'venda', 'oferta', 'desconto', 'loja'];
 const stickerCounts = {};
 const blockedUsers = {};
 const BLOCK_TIME = 5 * 60 * 1000;
+
+// Controle de anúncios
+const anunciosPorDia = {};
+const palavrasChaveVenda = ['venda', 'vendo', 'vendo:', 'à venda', 'disponível', 'compre', 'promoção', 'oferta'];
+
+// Reset diário de anúncios à meia-noite
+setInterval(() => {
+    const agora = new Date();
+    if (agora.getHours() === 0 && agora.getMinutes() === 0) {
+        for (const id in anunciosPorDia) {
+            anunciosPorDia[id] = 0;
+        }
+    }
+}, 60 * 1000); // Verifica a cada minuto
 
 client.on('message', async msg => {
     if (!msg.from.endsWith('@g.us')) return;
@@ -72,10 +85,19 @@ client.on('message', async msg => {
         }
     }
 
-    // Apagar anúncios
-    if (palavrasBloqueadas.some(p => body.includes(p))) {
-        await msg.delete(true).catch(() => {});
-        return msg.reply('*Mensagem de anúncio apagada automaticamente*');
+    // Verifica se é um anúncio de venda real
+    const isAnuncioVenda = palavrasChaveVenda.some(p => body.includes(p)) && body.length > 20;
+
+    if (isAnuncioVenda) {
+        anunciosPorDia[senderId] = anunciosPorDia[senderId] || 0;
+
+        if (anunciosPorDia[senderId] >= 1) {
+            await msg.delete(true).catch(() => {});
+            return msg.reply('*Você já publicou um anúncio de venda hoje. Aguarde até amanhã para anunciar novamente.*');
+        }
+
+        anunciosPorDia[senderId]++;
+        return; // permite o primeiro anúncio
     }
 
     // Apagar cumprimentos curtos
@@ -84,7 +106,7 @@ client.on('message', async msg => {
         return msg.reply('*Mensagem apagada: cumprimento curto*');
     }
 
-    // OCR: apagar somente se tiver cumprimentos nas imagens
+    // OCR para imagens com "bom dia", etc.
     if (msg.hasMedia && msg.type === 'image') {
         try {
             const media = await msg.downloadMedia();
