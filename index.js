@@ -1,4 +1,3 @@
-// Importações
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
@@ -7,13 +6,11 @@ const os = require('os');
 const axios = require('axios');
 const Tesseract = require('tesseract.js');
 
-// Configurações
 const WEATHER_API_KEY = '180053f3bc0132b960f34201304e89a7';
 const logsPath = path.join(__dirname, 'logs');
 const tmpDir = os.tmpdir();
 if (!fs.existsSync(logsPath)) fs.mkdirSync(logsPath);
 
-// Log
 function log(msg) {
     const timestamp = new Date().toISOString();
     const logFile = path.join(logsPath, 'bot.log');
@@ -21,7 +18,6 @@ function log(msg) {
     console.log(`[${timestamp}] ${msg}`);
 }
 
-// Inicializa o cliente
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -30,7 +26,6 @@ const client = new Client({
     }
 });
 
-// Eventos de conexão
 client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
     log('QR Code gerado! Escaneie com o WhatsApp.');
@@ -39,23 +34,26 @@ client.on('ready', () => log('Bot conectado e pronto!'));
 client.on('auth_failure', msg => log(`Falha na autenticação: ${msg}`));
 client.on('disconnected', reason => log(`Bot desconectado: ${reason}`));
 
-// Controle de spam de stickers
+// Regras e listas
 const stickerCounts = {};
 const blockedUsers = {};
-const BLOCK_TIME = 5 * 60 * 1000; // 5 minutos
+const BLOCK_TIME = 5 * 60 * 1000; // 5 min
 
-// Palavras proibidas
 const cumprimentos = ['bom dia', 'boa tarde', 'boa noite'];
+const palavrasChave = [
+    'bom dia', 'boa tarde', 'boa noite',
+    'deus te abençoe', 'abençoado', 'abençoados',
+    'que deus', 'paz', 'fé', 'esperança', 'gratidao'
+];
 const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
 
-// Evento principal
 client.on('message', async msg => {
     if (!msg.from.endsWith('@g.us')) return;
 
     const senderId = msg.author || msg.from;
     const body = msg.body?.toLowerCase() || '';
 
-    // Verifica bloqueio
+    // Bloqueio temporário
     if (blockedUsers[senderId]) {
         if (Date.now() < blockedUsers[senderId]) {
             try {
@@ -84,13 +82,12 @@ client.on('message', async msg => {
         try {
             const res = await axios.get(`https://api.openweathermap.org/data/2.5/forecast?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
             const data = res.data;
-
-            const previsao = data.list[0]; // previsão para a próxima hora
+            const previsao = data.list[0];
             const temp = previsao.main.temp;
             const descricao = previsao.weather[0].description;
             const umidade = previsao.main.humidity;
             const nuvens = previsao.clouds.all;
-            const chanceChuva = Math.round((previsao.pop || 0) * 100); // de 0 a 100%
+            const chanceChuva = Math.round((previsao.pop || 0) * 100);
 
             const texto = `*Previsão para Catanduva-SP:*\n` +
                 `Temperatura: ${temp}°C\n` +
@@ -108,7 +105,7 @@ client.on('message', async msg => {
         return;
     }
 
-    // Verifica por palavras proibidas
+    // Anúncios
     if (anuncios.some(p => body.includes(p))) {
         try {
             await msg.delete(true);
@@ -120,6 +117,7 @@ client.on('message', async msg => {
         return;
     }
 
+    // Cumprimentos curtos
     if (cumprimentos.some(f => body.includes(f)) && body.split(' ').length <= 5) {
         try {
             await msg.delete(true);
@@ -131,7 +129,7 @@ client.on('message', async msg => {
         return;
     }
 
-    // OCR em imagens (melhorado)
+    // OCR de imagens
     if (msg.hasMedia && msg.type === 'image') {
         try {
             const media = await msg.downloadMedia();
@@ -147,17 +145,20 @@ client.on('message', async msg => {
             const texto = text
                 .toLowerCase()
                 .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '') // remove acentos
-                .replace(/\s+/g, ' ')            // remove quebras de linha e espaços extras
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\s+/g, ' ')
                 .trim();
 
-            const cumprimentosNorm = cumprimentos.map(f =>
-                f.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            const palavrasNorm = palavrasChave.map(f =>
+                f.toLowerCase()
+                 .normalize('NFD')
+                 .replace(/[\u0300-\u036f]/g, '')
+                 .trim()
             );
 
-            if (cumprimentosNorm.some(f => texto.includes(f))) {
+            if (palavrasNorm.some(f => texto.includes(f))) {
                 await msg.delete(true);
-                log(`Imagem com saudação detectada e apagada: "${texto}"`);
+                log(`Imagem com frase detectada e apagada: "${texto}"`);
                 return;
             }
 
@@ -166,7 +167,7 @@ client.on('message', async msg => {
         }
     }
 
-    // Controle de stickers e GIFs
+    // Stickers e GIFs
     const isSticker = msg.type === 'sticker';
     const isGif = msg.hasMedia && msg._data?.isGif === true;
 
@@ -209,9 +210,8 @@ client.on('message', async msg => {
         return;
     }
 
-    // Zera contagem se enviar mensagem normal
+    // Reseta contagem
     if (stickerCounts[senderId]) stickerCounts[senderId] = 0;
 });
 
-// Inicia o bot
 client.initialize();
