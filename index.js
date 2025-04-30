@@ -6,7 +6,11 @@ const path = require('path');
 const axios = require('axios');
 const Tesseract = require('tesseract.js');
 const os = require('os');
-const { Configuration, OpenAIApi } = require("openai");
+const OpenAI = require('openai');
+
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
 const tmpDir = os.tmpdir();
 const WEATHER_API_KEY = '180053f3bc0132b960f34201304e89a7';
@@ -19,11 +23,6 @@ function log(message) {
     fs.appendFileSync(logFile, `[${timestamp}] ${message}\n`);
     console.log(`[${timestamp}] ${message}`);
 }
-
-const configuration = new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-});
-const openai = new OpenAIApi(configuration);
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -137,60 +136,27 @@ client.on('message', async msg => {
         const pergunta = body.replace('!pergunta', '').trim();
         if (!pergunta) return msg.reply('Use: !pergunta Qual é a capital do Brasil?');
 
-        await consultarIA(pergunta, client, msg);
+        try {
+            const resposta = await obterRespostaIA(pergunta);
+            await msg.reply(resposta);
+        } catch (err) {
+            log(`Erro IA: ${err.message}`);
+            await msg.reply('Erro ao consultar IA.');
+        }
         return;
     }
 });
 
 client.initialize();
 
-async function consultarIA(mensagem, sock, msg) {
-    try {
-        const stream = await openai.createChatCompletion(
-            {
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: mensagem }],
-                stream: true,
-            },
-            { responseType: "stream" }
-        );
+async function obterRespostaIA(pergunta) {
+    if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não está definida no .env');
 
-        let resposta = "";
-        let enviado = false;
+    const resposta = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: pergunta }],
+        temperature: 0.7
+    });
 
-        stream.data.on("data", (chunk) => {
-            const payloads = chunk
-                .toString()
-                .split("\n")
-                .filter((line) => line.trim() !== "");
-
-            for (const payload of payloads) {
-                if (payload.includes("[DONE]")) return;
-
-                const data = JSON.parse(payload.replace(/^data: /, ""));
-                const content = data.choices?.[0]?.delta?.content;
-                if (content) {
-                    resposta += content;
-
-                    if (!enviado && resposta.length > 10) {
-                        enviado = true;
-                        sock.sendMessage(msg.from, { text: "Respondendo..." }, { quoted: msg });
-                    }
-                }
-            }
-
-            if (resposta.trim()) {
-                sock.sendMessage(msg.from, { text: resposta.trim() }, { quoted: msg });
-            }
-        });
-
-        stream.data.on("end", () => {
-            if (!resposta.trim()) {
-                sock.sendMessage(msg.from, { text: "Não consegui gerar resposta." }, { quoted: msg });
-            }
-        });
-    } catch (err) {
-        log(`Erro IA: ${err?.response?.data || err.message}`);
-        await sock.sendMessage(msg.from, { text: "Erro ao consultar IA." }, { quoted: msg });
-    }
+    return resposta.choices[0].message.content.trim();
 }
