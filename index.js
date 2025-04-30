@@ -9,7 +9,6 @@ const os = require('os');
 
 const tmpDir = os.tmpdir();
 const WEATHER_API_KEY = '180053f3bc0132b960f34201304e89a7';
-
 const logsPath = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsPath)) fs.mkdirSync(logsPath);
 
@@ -24,17 +23,14 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--single-process', '--disable-gpu']
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
 
-client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
-    log('QR Code gerado! Escaneie com o WhatsApp.');
-});
+client.on('qr', qr => qrcode.generate(qr, { small: true }));
 client.on('ready', () => log('Bot conectado e pronto!'));
 client.on('auth_failure', msg => log(`Falha na autenticação: ${msg}`));
-client.on('disconnected', reason => log(`Bot desconectado: ${reason}`));
+client.on('disconnected', reason => log(`Desconectado: ${reason}`));
 
 const stickerCounts = {};
 const blockedUsers = {};
@@ -49,12 +45,7 @@ client.on('message', async msg => {
     if (blockedUsers[senderId]) {
         const restante = blockedUsers[senderId] - Date.now();
         if (restante > 0) {
-            try {
-                await msg.delete(true);
-                log(`Mensagem apagada de bloqueado: ${senderId}`);
-            } catch (err) {
-                log(`Erro ao apagar de bloqueado: ${err}`);
-            }
+            try { await msg.delete(true); } catch {}
             return;
         } else {
             delete blockedUsers[senderId];
@@ -63,51 +54,35 @@ client.on('message', async msg => {
     }
 
     if (body === '!id') {
-        await msg.reply(`ID deste grupo: ${msg.from}`);
-        log(`Comando !id usado por ${senderId}`);
+        await msg.reply(`ID do grupo: ${msg.from}`);
         return;
     }
 
     if (body === '!clima') {
-        const contact = await msg.getContact();
         try {
             const res = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=Catanduva,BR&appid=${WEATHER_API_KEY}&units=metric&lang=pt_br`);
             const data = res.data;
-            const texto = `*Previsão para Catanduva-SP:*\n` +
-                          `Temperatura: ${data.main.temp}°C\n` +
-                          `Céu: ${data.weather[0].description}\n` +
-                          `Umidade: ${data.main.humidity}%\n` +
-                          `Chance de chuva: ${data.clouds.all}%`;
-            await client.sendMessage(contact.id._serialized, texto);
-            log(`Clima enviado no privado de ${senderId}`);
+            const texto = `*Clima em Catanduva-SP:*\n` +
+                `Temperatura: ${data.main.temp}°C\n` +
+                `Céu: ${data.weather[0].description}\n` +
+                `Umidade: ${data.main.humidity}%\n` +
+                `Nuvens: ${data.clouds.all}%`;
+            await msg.reply(texto);
         } catch (err) {
-            log('Erro ao buscar clima: ' + err);
             await msg.reply('Erro ao obter previsão do tempo.');
-        }
-        return;
-    }
-
-    const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
-    if (anuncios.some(p => body.includes(p))) {
-        try {
-            await msg.delete(true);
-            await msg.reply('*Mensagem de anúncio apagada*');
-            log(`Anúncio apagado: ${body}`);
-        } catch (err) {
-            log(`Erro ao apagar anúncio: ${err}`);
         }
         return;
     }
 
     const cumprimentos = ['bom dia', 'boa tarde', 'boa noite'];
     if (cumprimentos.some(f => body.includes(f)) && body.split(' ').length <= 5) {
-        try {
-            await msg.delete(true);
-            await msg.reply('*Mensagem de cumprimento apagada*');
-            log(`Cumprimento apagado: ${body}`);
-        } catch (err) {
-            log(`Erro ao apagar cumprimento: ${err}`);
-        }
+        try { await msg.delete(true); await msg.reply('*Mensagem de cumprimento apagada*'); } catch {}
+        return;
+    }
+
+    const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
+    if (anuncios.some(p => body.includes(p))) {
+        try { await msg.delete(true); await msg.reply('*Anúncio apagado*'); } catch {}
         return;
     }
 
@@ -117,21 +92,17 @@ client.on('message', async msg => {
             const filePath = path.join(tmpDir, `${Date.now()}.png`);
             fs.writeFileSync(filePath, Buffer.from(media.data, 'base64'));
 
-            const { data: { text } } = await Tesseract.recognize(filePath, 'por', {
-                logger: m => log(`OCR: ${m.status} - ${Math.round(m.progress * 100)}%`)
-            });
-
+            const { data: { text } } = await Tesseract.recognize(filePath, 'por');
             fs.unlinkSync(filePath);
-            const texto = text.toLowerCase();
 
+            const texto = text.toLowerCase();
             if (cumprimentos.some(f => texto.includes(f))) {
                 await msg.delete(true);
-                log(`Imagem com saudação detectada e apagada: "${texto.trim()}"`);
-                return;
             }
         } catch (err) {
-            log(`Erro no OCR: ${err}`);
+            log(`Erro no OCR: ${err.message}`);
         }
+        return;
     }
 
     const isSticker = msg.type === 'sticker';
@@ -140,60 +111,31 @@ client.on('message', async msg => {
     if (isSticker || isGif) {
         stickerCounts[senderId] = (stickerCounts[senderId] || 0) + 1;
 
-        if (stickerCounts[senderId] === 3) {
-            try {
-                const contact = await msg.getContact();
-                const nome = contact.pushname || contact.number;
-                await msg.reply(`*${nome}*, pare de enviar figurinhas ou GIFs! Você será silenciado se continuar.`);
-                await msg.delete(true);
-                log(`Advertência enviada a ${senderId}`);
-            } catch (err) {
-                log(`Erro na advertência: ${err}`);
+        if (stickerCounts[senderId] >= 3) {
+            await msg.reply(`Evite enviar figurinhas/GIFs repetidamente!`);
+            if (stickerCounts[senderId] > 3) {
+                blockedUsers[senderId] = Date.now() + BLOCK_TIME;
+                await msg.reply(`Usuário silenciado por 5 minutos.`);
             }
-            return;
         }
 
-        if (stickerCounts[senderId] > 3) {
-            blockedUsers[senderId] = Date.now() + BLOCK_TIME;
-            try {
-                await msg.delete(true);
-                const contact = await msg.getContact();
-                const nome = contact.pushname || contact.number;
-                await msg.reply(`*${nome}* foi silenciado por 5 minutos por excesso de figurinhas ou GIFs.`);
-                log(`Silenciado ${senderId}`);
-            } catch (err) {
-                log(`Erro ao silenciar: ${err}`);
-            }
-            return;
-        }
-
-        try {
-            await msg.delete(true);
-            log(`Sticker ou GIF apagado de ${senderId}`);
-        } catch (err) {
-            log(`Erro ao apagar sticker/GIF: ${err}`);
-        }
+        try { await msg.delete(true); } catch {}
         return;
     }
 
-    // Se a mensagem não for figurinha nem GIF, reseta o contador
     if (!isSticker && !isGif && stickerCounts[senderId]) {
         stickerCounts[senderId] = 0;
-        log(`Contador de figurinhas resetado para ${senderId}`);
     }
 
     if (body.startsWith('!pergunta')) {
         const pergunta = body.replace('!pergunta', '').trim();
-        if (!pergunta) {
-            return msg.reply('Digite uma pergunta após o comando, ex: *!pergunta Qual é a capital da França?*');
-        }
+        if (!pergunta) return msg.reply('Use: !pergunta Qual é a capital do Brasil?');
 
         try {
             const resposta = await obterRespostaIA(pergunta);
             await msg.reply(resposta);
-            log(`Pergunta respondida com IA: ${pergunta}`);
         } catch (err) {
-            log(`Erro na IA: ${err.message}`);
+            log(`Erro IA: ${err.message}`);
             await msg.reply('Erro ao consultar IA.');
         }
         return;
@@ -204,7 +146,7 @@ client.initialize();
 
 async function obterRespostaIA(pergunta) {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('Chave da API OpenAI não configurada.');
+    if (!apiKey) throw new Error('OPENAI_API_KEY não está definida no .env');
 
     const resposta = await axios.post(
         'https://api.openai.com/v1/chat/completions',
@@ -220,5 +162,6 @@ async function obterRespostaIA(pergunta) {
             }
         }
     );
+
     return resposta.data.choices[0].message.content.trim();
 }
