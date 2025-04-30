@@ -176,7 +176,11 @@ client.on('message', async msg => {
         return;
     }
 
-    if (stickerCounts[senderId]) stickerCounts[senderId] = 0;
+    // Se a mensagem não for figurinha nem GIF, reseta o contador
+    if (!isSticker && !isGif && stickerCounts[senderId]) {
+        stickerCounts[senderId] = 0;
+        log(`Contador de figurinhas resetado para ${senderId}`);
+    }
 
     if (body.startsWith('!pergunta')) {
         const pergunta = body.replace('!pergunta', '').trim();
