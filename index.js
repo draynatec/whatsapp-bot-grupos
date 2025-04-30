@@ -7,17 +7,12 @@ const axios = require('axios');
 const Tesseract = require('tesseract.js');
 const os = require('os');
 
-// Diretório temporário
 const tmpDir = os.tmpdir();
-
-// Chave da API do clima
 const WEATHER_API_KEY = '180053f3bc0132b960f34201304e89a7';
 
-// Pasta de logs
 const logsPath = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsPath)) fs.mkdirSync(logsPath);
 
-// Função de log
 function log(message) {
     const logFile = path.join(logsPath, 'bot.log');
     const timestamp = new Date().toISOString();
@@ -25,7 +20,6 @@ function log(message) {
     console.log(`[${timestamp}] ${message}`);
 }
 
-// Inicializa cliente WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -34,7 +28,6 @@ const client = new Client({
     }
 });
 
-// Eventos de conexão
 client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
     log('QR Code gerado! Escaneie com o WhatsApp.');
@@ -43,10 +36,9 @@ client.on('ready', () => log('Bot conectado e pronto!'));
 client.on('auth_failure', msg => log(`Falha na autenticação: ${msg}`));
 client.on('disconnected', reason => log(`Bot desconectado: ${reason}`));
 
-// Controle de bloqueios
 const stickerCounts = {};
 const blockedUsers = {};
-const BLOCK_TIME = 5 * 60 * 1000; // 5 minutos
+const BLOCK_TIME = 5 * 60 * 1000;
 
 client.on('message', async msg => {
     if (!msg.from.endsWith('@g.us')) return;
@@ -54,7 +46,6 @@ client.on('message', async msg => {
     const senderId = msg.author || msg.from;
     const body = msg.body?.toLowerCase() || '';
 
-    // Verifica bloqueio
     if (blockedUsers[senderId]) {
         const restante = blockedUsers[senderId] - Date.now();
         if (restante > 0) {
@@ -71,14 +62,12 @@ client.on('message', async msg => {
         }
     }
 
-    // !id - mostra ID do grupo
     if (body === '!id') {
         await msg.reply(`ID deste grupo: ${msg.from}`);
         log(`Comando !id usado por ${senderId}`);
         return;
     }
 
-    // !clima - previsão do tempo no privado
     if (body === '!clima') {
         const contact = await msg.getContact();
         try {
@@ -98,7 +87,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // Anúncios
     const anuncios = ['compre', 'promoção', 'venda', 'loja', 'desconto', 'oferta'];
     if (anuncios.some(p => body.includes(p))) {
         try {
@@ -111,7 +99,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // Cumprimentos curtos
     const cumprimentos = ['bom dia', 'boa tarde', 'boa noite'];
     if (cumprimentos.some(f => body.includes(f)) && body.split(' ').length <= 5) {
         try {
@@ -124,7 +111,6 @@ client.on('message', async msg => {
         return;
     }
 
-    // OCR em imagens
     if (msg.hasMedia && msg.type === 'image') {
         try {
             const media = await msg.downloadMedia();
@@ -148,7 +134,6 @@ client.on('message', async msg => {
         }
     }
 
-    // Stickers e GIFs
     const isSticker = msg.type === 'sticker';
     const isGif = msg.hasMedia && msg._data?.isGif === true;
 
@@ -193,7 +178,6 @@ client.on('message', async msg => {
 
     if (stickerCounts[senderId]) stickerCounts[senderId] = 0;
 
-    // !pergunta - IA com OpenAI
     if (body.startsWith('!pergunta')) {
         const pergunta = body.replace('!pergunta', '').trim();
         if (!pergunta) {
@@ -210,15 +194,14 @@ client.on('message', async msg => {
         }
         return;
     }
-
 });
 
-// Inicia o bot
 client.initialize();
 
-// Função de resposta da IA
 async function obterRespostaIA(pergunta) {
     const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error('Chave da API OpenAI não configurada.');
+
     const resposta = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
